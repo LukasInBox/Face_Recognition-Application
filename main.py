@@ -27,18 +27,20 @@ class App:
         self.btn_snapshot = Button(window, text="Signup", width=50, command=self.save_snapshot)
         self.btn_snapshot.pack(anchor='center', expand=True)
         
-        # Button for login
-        self.btn_login = Button(window, text="Login", width=50, command=self.login)
-        self.btn_login.pack(anchor='center', expand=True)
+        # Button for clocking in
+        self.btn_clock_in = Button(window, text="Clock In", width=50, command=lambda: self.handle_clocking("in"))
+        self.btn_clock_in.pack(anchor='center', expand=True)
+        
+        # Button for clocking out
+        self.btn_clock_out = Button(window, text="Clock Out", width=50, command=lambda: self.handle_clocking("out"))
+        self.btn_clock_out.pack(anchor='center', expand=True)
 
     def start(self):
         self.update()
         self.window.mainloop()
     
     def update(self):
-        # Get a frame from the video source
         ret, frame = self.cap.read()
-        
         if ret:
             self.display_frame(frame)
         self.window.after(10, self.update)
@@ -75,10 +77,9 @@ class App:
             if face is not None:
                 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
                 cv2.imwrite(f'saved_attributes/face_{timestamp}.jpg', face)
-                print("Face saved.")
+                messagebox.showinfo("Snapshot Saved", "Face saved.")
 
     def detect_face(self, frame):
-        # Extracts the face from the frame
         (h, w) = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(cv2.resize(frame, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
         self.net.setInput(blob)
@@ -92,25 +93,38 @@ class App:
                 return frame[startY:endY, startX:endX]
         return None
 
-    def login(self):
+    def handle_clocking(self, action):
         ret, frame = self.cap.read()
         if ret:
-            login_face = self.detect_face(frame)
-            if login_face is None:
-                messagebox.showerror("Login failed", "No face detected.")
+            face = self.detect_face(frame)
+            if face is None:
+                messagebox.showerror("Clocking failed", f"No face detected for {action}. Please ensure your face is in the frame.")
                 return
 
-            # Compare detected face with saved faces
+            # Check if the detected face matches any saved faces
+            face_recognized = False
             for filename in os.listdir('saved_attributes'):
                 saved_face = cv2.imread(os.path.join('saved_attributes', filename))
-                if self.compare_faces(saved_face, login_face):
-                    messagebox.showinfo("Login Success", "Face recognized!")
-                    return
-            messagebox.showerror("Login failed", "Face not recognized.")
+                if self.compare_faces(saved_face, face):
+                    face_recognized = True
+                    break
+
+            if not face_recognized:
+                messagebox.showerror("Clocking failed", f"Face not recognized. You are not authorized to {action}.")
+                return
+
+            # Log the time for the action if the face is recognized
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if action == "in":
+                with open('clock_in_times.txt', 'a') as f:
+                    f.write(f"Clock In: {timestamp}\n")
+                messagebox.showinfo("Clock In Success", "You have clocked in successfully!")
+            elif action == "out":
+                with open('clock_out_times.txt', 'a') as f:
+                    f.write(f"Clock Out: {timestamp}\n")
+                messagebox.showinfo("Clock Out Success", "You have clocked out successfully!")
 
     def compare_faces(self, saved_face, login_face):
-        # Simple comparison of two face images using template matching
-        # Note: This is not a reliable method for actual face recognition.
         saved_face = cv2.resize(saved_face, (100, 100))
         login_face = cv2.resize(login_face, (100, 100))
         res = cv2.matchTemplate(saved_face, login_face, cv2.TM_CCOEFF_NORMED)
@@ -126,3 +140,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

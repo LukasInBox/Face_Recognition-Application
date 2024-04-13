@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 from datetime import datetime
-from tkinter import Tk, Button, Canvas, messagebox
+from tkinter import Tk, Button, Canvas, Entry, Label, messagebox
 from PIL import Image, ImageTk
 
 # Ensure that folder exists to save data, it should be named "saved_attributes"
@@ -22,7 +22,13 @@ class App:
         
         # Create a canvas that can fit the above video source size
         self.canvas = None
-        
+
+        # Entry and label for user name during signup or recognition
+        self.label_user_name = Label(window, text="Enter/Recognized Username:")
+        self.label_user_name.pack(anchor='center')
+        self.entry_user_name = Entry(window)
+        self.entry_user_name.pack(anchor='center')
+
         # Button that lets the user take a snapshot and save it
         self.btn_snapshot = Button(window, text="Signup", width=50, command=self.save_snapshot)
         self.btn_snapshot.pack(anchor='center', expand=True)
@@ -58,10 +64,18 @@ class App:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 (startX, startY, endX, endY) = box.astype("int")
                 cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 0, 255), 2)
-                
-                text = "{:.2f}%".format(confidence * 100)
+
+                face = frame[startY:endY, startX:endX]
+                username = "Unknown"
+                for filename in os.listdir('saved_attributes'):
+                    saved_face = cv2.imread(os.path.join('saved_attributes', filename))
+                    if self.compare_faces(saved_face, face):
+                        username = filename.split('_')[0]
+                        break
+
+                text = f"{username}: {confidence * 100:.2f}%"
                 y = startY - 10 if startY - 10 > 10 else startY + 10
-                cv2.putText(frame, text, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
+                cv2.putText(frame, text, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 2)
 
         self.photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
         if self.canvas is None:
@@ -69,15 +83,35 @@ class App:
             self.canvas.pack()
         
         self.canvas.create_image(0, 0, image=self.photo, anchor='nw')
-    
+
     def save_snapshot(self):
+        username = self.entry_user_name.get().strip()
+        if not username:
+            messagebox.showerror("Signup Failed", "Please enter a user name.")
+            return
+
         ret, frame = self.cap.read()
         if ret:
             face = self.detect_face(frame)
             if face is not None:
+                # Check for existing faces
+                face_already_registered = False
+                for filename in os.listdir('saved_attributes'):
+                    saved_face = cv2.imread(os.path.join('saved_attributes', filename))
+                    if saved_face is not None and self.compare_faces(saved_face, face):
+                        face_already_registered = True
+                        break
+                
+                if face_already_registered:
+                    messagebox.showerror("Signup Failed", "This face is already registered.")
+                    return
+
                 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-                cv2.imwrite(f'saved_attributes/face_{timestamp}.jpg', face)
-                messagebox.showinfo("Snapshot Saved", "Face saved.")
+                filename = f'saved_attributes/{username}_{timestamp}.jpg'
+                cv2.imwrite(filename, face)
+                messagebox.showinfo("Snapshot Saved", f"Face saved for user: {username}")
+            else:
+                messagebox.showerror("Signup Failed", "No face detected. Try again.")
 
     def detect_face(self, frame):
         (h, w) = frame.shape[:2]
@@ -101,27 +135,30 @@ class App:
                 messagebox.showerror("Clocking failed", f"No face detected for {action}. Please ensure your face is in the frame.")
                 return
 
-            # Check if the detected face matches any saved faces
             face_recognized = False
+            matched_user = ""
             for filename in os.listdir('saved_attributes'):
                 saved_face = cv2.imread(os.path.join('saved_attributes', filename))
                 if self.compare_faces(saved_face, face):
                     face_recognized = True
+                    matched_user = filename.split('_')[0]
+                    self.entry_user_name.delete(0, 'end')
+                    self.entry_user_name.insert(0, matched_user)
                     break
 
             if not face_recognized:
                 messagebox.showerror("Clocking failed", f"Face not recognized. You are not authorized to {action}.")
                 return
 
-            # Log the time for the action if the face is recognized
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_message = f"{action.capitalize()}: {timestamp} by {matched_user}\n"
             if action == "in":
                 with open('clock_in_times.txt', 'a') as f:
-                    f.write(f"Clock In: {timestamp}\n")
+                    f.write(log_message)
                 messagebox.showinfo("Clock In Success", "You have clocked in successfully!")
             elif action == "out":
                 with open('clock_out_times.txt', 'a') as f:
-                    f.write(f"Clock Out: {timestamp}\n")
+                    f.write(log_message)
                 messagebox.showinfo("Clock Out Success", "You have clocked out successfully!")
 
     def compare_faces(self, saved_face, login_face):
@@ -140,4 +177,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

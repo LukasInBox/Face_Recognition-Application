@@ -9,10 +9,30 @@ from PIL import Image, ImageTk
 if not os.path.exists('saved_attributes'):
     os.makedirs('saved_attributes')
 
+# Load user statuses at startup
+user_statuses = {}
+
+def load_user_statuses():
+    status_file = 'user_status.txt'
+    if os.path.exists(status_file):
+        with open(status_file, 'r') as file:
+            for line in file:
+                parts = line.strip().split()
+                if len(parts) > 2:
+                    username, action = parts[0], parts[-1]
+                    user_statuses[username] = action
+
+def save_user_status(username, action):
+    user_statuses[username] = action
+    with open('user_status.txt', 'w') as file:
+        for user, act in user_statuses.items():
+            file.write(f"{user} clocked {act} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
 class App:
     def __init__(self, window, window_title):
         self.window = window
         self.window.title(window_title)
+        load_user_statuses()
         
         # Load the model for face detection
         self.net = cv2.dnn.readNetFromCaffe('deploy.prototxt.txt', 'res10_300x300_ssd_iter_140000.caffemodel')
@@ -132,7 +152,7 @@ class App:
         if ret:
             face = self.detect_face(frame)
             if face is None:
-                messagebox.showerror("Clocking failed", f"No face detected for {action}. Please ensure your face is in the frame.")
+                messagebox.showerror("Clocking failed", "No face detected. Please ensure your face is in the frame.")
                 return
 
             face_recognized = False
@@ -147,19 +167,18 @@ class App:
                     break
 
             if not face_recognized:
-                messagebox.showerror("Clocking failed", f"Face not recognized. You are not authorized to {action}.")
+                messagebox.showerror("Clocking failed", "Face not recognized. You are not authorized to clock.")
                 return
 
+            # Check if user can perform the action
+            last_action = user_statuses.get(matched_user, None)
+            if last_action == action:
+                messagebox.showerror("Clocking Error", f"User '{matched_user}' cannot clock {action} again without clocking {'out' if action == 'in' else 'in'}.")
+                return
+
+            save_user_status(matched_user, action)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_message = f"{action.capitalize()}: {timestamp} by {matched_user}\n"
-            if action == "in":
-                with open('clock_in_times.txt', 'a') as f:
-                    f.write(log_message)
-                messagebox.showinfo("Clock In Success", "You have clocked in successfully!")
-            elif action == "out":
-                with open('clock_out_times.txt', 'a') as f:
-                    f.write(log_message)
-                messagebox.showinfo("Clock Out Success", "You have clocked out successfully!")
+            messagebox.showinfo("Clocking Success", f"User '{matched_user}' clocked {action} successfully at {timestamp}.")
 
     def compare_faces(self, saved_face, login_face):
         saved_face = cv2.resize(saved_face, (100, 100))

@@ -28,6 +28,11 @@ def save_user_status(username, action):
         for user, act in user_statuses.items():
             file.write(f"{user} clocked {act} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
+def log_time(username, action):
+    filename = f"clock_{action}_times.txt"
+    with open(filename, "a") as file:
+        file.write(f"{username} clocked {action} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
 class App:
     def __init__(self, window, window_title):
         self.window = window
@@ -60,6 +65,8 @@ class App:
         # Button for clocking out
         self.btn_clock_out = Button(window, text="Clock Out", width=50, command=lambda: self.handle_clocking("out"))
         self.btn_clock_out.pack(anchor='center', expand=True)
+
+        self.start()
 
     def start(self):
         self.update()
@@ -177,6 +184,7 @@ class App:
                 return
 
             save_user_status(matched_user, action)
+            log_time(matched_user, action)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             messagebox.showinfo("Clocking Success", f"User '{matched_user}' clocked {action} successfully at {timestamp}.")
 
@@ -184,7 +192,7 @@ class App:
         saved_face = cv2.resize(saved_face, (100, 100))
         login_face = cv2.resize(login_face, (100, 100))
         res = cv2.matchTemplate(saved_face, login_face, cv2.TM_CCOEFF_NORMED)
-        threshold = 0.8  # Set a threshold for deciding a match
+        threshold = 0.8  # Threshold for deciding a match
         if np.max(res) > threshold:
             return True
         return False

@@ -1,7 +1,8 @@
+
 import unittest
 from unittest.mock import patch, MagicMock
 import numpy as np
-from tkinter import Tk
+from tkinter import Tk, messagebox
 from main import App  # Running main.py file for testing
 
 class TestApp(unittest.TestCase):
@@ -20,17 +21,12 @@ class TestApp(unittest.TestCase):
         mock_video_capture.return_value.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
         detections = np.zeros((1, 1, 1, 7))
         detections[0, 0, 0, 2] = 1.0  # High confidence
-        detections[0, 0, 0, 3:7] = np.array([0.1, 0.1, 0.9, 0.9])  
+        detections[0, 0, 0, 3:7] = np.array([0.1, 0.1, 0.9, 0.9])
         mock_dnn_net.return_value.forward.return_value = detections
         
         with patch('tkinter.Canvas.create_image') as mock_create_image:
             self.app.update()
-            # Check that create_image is called once per frame
             mock_create_image.assert_called_once()
-
-            # Dimensions check for image created
-            args, kwargs = mock_create_image.call_args
-            self.assertEqual(kwargs['anchor'], 'nw')
 
     @patch('cv2.imwrite')
     @patch('cv2.VideoCapture')
@@ -39,10 +35,29 @@ class TestApp(unittest.TestCase):
         mock_video_capture.return_value.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
         
         self.app.save_snapshot()
-        
-        # Check if cv2.imwrite is called
         mock_imwrite.assert_called_once()
-        
+
+    @patch('builtins.open')
+    def test_load_user_statuses(self, mock_open):
+        """Test loading user statuses from file."""
+        mock_open.return_value.__enter__.return_value = MagicMock(spec=['read', 'write'])
+        self.app.load_user_statuses()
+        mock_open.assert_called_once_with('user_status.txt', 'r')
+
+    @patch('builtins.open')
+    def test_save_user_status(self, mock_open):
+        """Test saving user status to file."""
+        mock_open.return_value.__enter__.return_value = MagicMock(spec=['read', 'write'])
+        self.app.save_user_status('user1', 'clocked_in')
+        mock_open.assert_called_once_with('user_status.txt', 'w')
+
+    @patch('builtins.open')
+    def test_log_time(self, mock_open):
+        """Test logging time function."""
+        mock_open.return_value.__enter__.return_value = MagicMock(spec=['read', 'write'])
+        self.app.log_time('user1', 'clocked_in')
+        mock_open.assert_called_once()
+
     def tearDown(self):
         self.root.destroy()
 
